@@ -31,3 +31,5 @@ REACTION  ANDN andn  process:resource=resANDN:value=3.0:type=pow:frac=0.0025 req
 REACTION  NOR  nor   process:resource=resNOR:value=4.0:type=pow:frac=0.0025 requisite:max_count=1
 REACTION  XOR  xor   process:resource=resXOR:value=4.0:type=pow:frac=0.0025 requisite:max_count=1
 REACTION  EQU  equ   process:resource=resEQU:value=5.0:type=pow:frac=0.0025 requisite:max_count=1
+
+CELL safe 

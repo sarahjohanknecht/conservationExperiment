@@ -11,6 +11,9 @@
 # 9, the fraction of the resource absorbable in each reaction is simply
 # 9/3600 or 0.0025.
 #
+# The "safe" cell resource denotes locations in the world where organisms
+# are safe from resource dependent kill events
+#
 # For information on how to use this file, see:  doc/environment.html
 # For other sample environments, see:  source/support/config/ 
 #
@@ -21,6 +24,8 @@ RESOURCE  resAND:inflow=10:outflow=0.01   resORN:inflow=10:outflow=0.01
 RESOURCE  resOR:inflow=10:outflow=0.01    resANDN:inflow=10:outflow=0.01
 RESOURCE  resNOR:inflow=10:outflow=0.01   resXOR:inflow=10:outflow=0.01
 RESOURCE  resEQU:inflow=10:outflow=0.01
+
+CELL safe:0..15,60..75,120..135,180..195,240..255,300..315,360..375,420..435,480..495,540..555,600..615,660..675,720..735,780..795,840..855:initial=1:inflow=0:outflow=0 #Denotes preserved area
 
 REACTION  NOT  not   process:resource=resNOT:value=1.0:type=pow:frac=0.0025 requisite:max_count=1
 REACTION  NAND nand  process:resource=resNAND:value=1.0:type=pow:frac=0.0025 requisite:max_count=1
