@@ -1,0 +1,54 @@
+\begin{thebibliography}{}
+
+\bibitem[Adami, 1995]{CA2}
+Adami, C. (1995).
+\newblock Self-organized criticality in living systems.
+\newblock {\em Physics Letters A}, 203:29--32.
+
+\bibitem[Aguilar et~al., 2014]{Aguilar:2014}
+Aguilar, W., Santamar{\'\i}a~Bonfil, G., Froese, T., and Gershenson, C. (2014).
+\newblock The past, present, and future of artificial life.
+\newblock {\em Frontiers in Robotics and AI}, 1(8).
+
+\bibitem[Chu and Adami, 1993]{Chu:1993}
+Chu, J. and Adami, C. (1993).
+\newblock Propagation of information in populations of self-replicating code.
+\newblock In Langton, C. and Shimohara, K., editors, {\em Artificial Life V},
+  pages 462--469. MIT Press, Cambridge, MA.
+
+\bibitem[Clancey, 1979]{Clancey:1979}
+Clancey, W.~J. (1979).
+\newblock {\em Transfer of Rule-Based Expertise Through a Tutorial Dialogue}.
+\newblock PhD thesis, Department of Computer Science, Stanford University.
+
+\bibitem[Clancey, ress]{Clancey:inpress}
+Clancey, W.~J. (in press).
+\newblock The engineering of qualitative models.
+\newblock {\em To appear in the Journal of Theoretical Biology}.
+
+\bibitem[Engelmore and Morgan, 1986]{Engelmore:1986}
+Engelmore, R. and Morgan, A., editors (1986).
+\newblock {\em Blackboard Systems}.
+\newblock Addison-Wesley, Reading, MA.
+
+\bibitem[Gould and Eldregde, 1993]{GE93}
+Gould, S. and Eldregde, N. (1993).
+\newblock Punctuated equilibrium comes of age.
+\newblock {\em Nature}, 366:223--227.
+
+\bibitem[Hasling et~al., 1983]{Hasling:1983}
+Hasling, D.~W., Clancey, W.~J., and Rennels, G.~R. (1983).
+\newblock Strategic explanations in consultation.
+\newblock {\em The International Journal of Man-Machine Studies}, 20(1):3--19.
+
+\bibitem[Rice, 1986]{Rice:1986}
+Rice, J. (1986).
+\newblock Poligon: A system for parallel problem solving.
+\newblock Technical Report KSL-86-19, Dept. of Computer Science, Stanford Univ.
+
+\bibitem[Robinson, 1980]{Robinson:1980}
+Robinson, A.~L. (1980).
+\newblock New ways to make microcircuits smaller.
+\newblock {\em Science}, 208:1019--1026.
+
+\end{thebibliography}
