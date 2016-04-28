@@ -1,0 +1,1523 @@
+---
+title: "Evolutionary generation and maintenance of diversity is promoted by several small reserves"
+author: "Emily Dolson"
+date: "12/07/2015"
+output: html_document
+---
+
+Start out by loading libraries:
+
+```{r, message=FALSE, results='hide'}
+library(ape)
+library(entropy)
+library(ggplot2)
+library(lme4)
+library(reshape2)
+library(cowplot)
+library(ncf)
+library(geoR)
+```
+
+To obtain a spatial weights matrix, we wrote a simulation of the probability of an organism in any one cell having offspring end up in any other cell. This was time consuming, so we ran it on the HPCC. Here is the code:
+
+```{r, echo=FALSE}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(just = "top", layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+First we extract data from Avida's output files (run on the HPCC).
+
+```{r, eval=FALSE}
+dirs <- list.dirs(path = "../round_2_results", recursive=FALSE)
+print(dirs)
+
+#Make sure that files from same replicate get merged appropriately
+
+# Take just the max update for each file; looking at just endpoints
+
+
+# Take just the max update for each file; looking at just endpoints
+results.data <- NULL #This section adapted from stackoverflow.com answer
+
+
+
+for (d in dirs) {
+  for (d2 in list.dirs(path = d, recursive = FALSE)){
+
+		phenotype_file_path <- paste(d2, "phenotype_count.dat", sep = "/")    
+		average_file_path <- paste(d2, "average.dat", sep = "/")
+		count_file_path <- paste(d2, "count.dat", sep = "/" )
+
+		if (file.exists(phenotype_file_path) & file.exists(average_file_path)){
+    
+			phenotypes <- read.csv(phenotype_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 8)
+			phenotypes[,1]<-as.numeric(as.character(phenotypes[,1]))
+			max.update.phenotype<-max(phenotypes[,1])
+
+			phenotypes<-subset(phenotypes, phenotypes[,1]==max.update.phenotype)
+
+
+
+			fitness <- read.csv(average_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
+			fitness[,1]<-as.numeric(as.character(fitness[,1]))
+			max.update.fitness<-max(fitness[,1])
+			fitness<-subset(fitness, fitness[,1]==max.update.fitness)
+
+			wanted <- cbind(fitness[,1], fitness[,4], fitness[,13])
+
+			wanted[,1]<-as.numeric(as.character(wanted[,1]))
+			wanted[,2]<-as.numeric(as.character(wanted[,2]))
+			wanted[,3]<-as.numeric(as.character(wanted[,3]))
+
+			counts <- read.csv(count_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
+
+			wanted <-  cbind(wanted, counts[,3], counts[,4])
+
+			wanted[,4]<-as.numeric(as.character(wanted[,4]))
+			wanted[,5]<-as.numeric(as.character(wanted[,5]))
+
+			fitness <- wanted
+
+			colnames(fitness) <- c("Update", "Fitness", "Generation", "Pop.Size", "Unique.Genotypes")
+
+			colnames(phenotypes) <- c("Update", "Unique.Phenotypes.Task", "Shannon.Diversity", "Unique.Phenotype.Count", "Average.Phenotype.Diversity", "Average.Task.Diversity")
+
+			dat <- merge(phenotypes, fitness, by = 1)
+
+			dat$Condition <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+
+			dat$Killed <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_killed)', dat$Condition , perl=T))))
+
+			dat$Patches <- 0
+
+			if (as.numeric(unlist(gregexpr('patch', dat$Condition , perl=T)))>0) {
+				dat$Patches <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_patch)', dat$Condition , perl=T))))
+				}
+
+			dat$Ecology <- "N"
+
+			if (as.numeric(unlist(gregexpr('ecology', dat$Condition , perl=T)))>0) {
+				dat$Ecology <- "Y"
+				}
+
+
+			full.string <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+
+			seed <- tail(unlist(strsplit(full.string, split = "_", fixed = T)), n=1)
+
+
+			foo <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+			blah <- tail(unlist(strsplit(foo, split = "-", fixed = T)), n=1)
+			initial.pop <- head(unlist(strsplit(blah, split = "_", fixed = T)), n=1)
+
+			dat$Initial.Pop<-initial.pop		
+			dat$Seed <- as.numeric(as.character(seed))
+
+
+			results.data <- rbind(results.data, dat)
+			}
+		}
+	}
+
+
+dirs <- list.dirs(path = "/mnt/home/dolsonem/conservation/round_2_results", recursive=FALSE)
+
+#Make sure that files from same replicate get merged appropriately
+
+# Take just the max update for each file; looking at just endpoints
+
+
+# Take just the max update for each file; looking at just endpoints
+
+
+
+for (d in dirs) {
+	for (d2 in list.dirs(path = d, recursive = FALSE)){
+
+		phenotype_file_path <- paste(d2, "phenotype_count.dat", sep = "/")    
+		average_file_path <- paste(d2, "average.dat", sep = "/")
+		count_file_path <- paste(d2, "count.dat", sep = "/")
+
+		if (file.exists(phenotype_file_path) & file.exists(average_file_path)){
+    
+			phenotypes <- read.csv(phenotype_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 8)
+			phenotypes[,1]<-as.numeric(as.character(phenotypes[,1]))
+			max.update.phenotype<-max(phenotypes[,1])
+
+			phenotypes<-subset(phenotypes, phenotypes[,1]==max.update.phenotype)
+
+                        counts <- read.csv(count_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
+
+
+			fitness <- read.csv(average_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
+			fitness[,1]<-as.numeric(as.character(fitness[,1]))
+			max.update.fitness<-max(fitness[,1])
+			fitness<-subset(fitness, fitness[,1]==max.update.fitness)
+
+			wanted <- cbind(fitness[,1], fitness[,4], fitness[,13])
+
+			wanted[,1]<-as.numeric(as.character(wanted[,1]))
+			wanted[,2]<-as.numeric(as.character(wanted[,2]))
+			wanted[,3]<-as.numeric(as.character(wanted[,3]))
+
+			wanted < cbind(wanted, counts[,3], counts[,4]
+
+			wanted[,4]<-as.numeric(as.character(wanted[,4]))
+			wanted[,5]<-as.numeric(as.character(wanted[,5]))
+
+			fitness <- wanted
+
+			colnames(fitness) <- c("Update", "Fitness", "Generation", "Pop.Size", "Unique.Genotypes")
+
+			colnames(phenotypes) <- c("Update", "Unique.Phenotypes.Task", "Shannon.Diversity", "Unique.Phenotype.Count", "Average.Phenotype.Diversity", "Average.Task.Diversity")
+
+			dat <- merge(phenotypes, fitness, by = 1)
+
+			dat$Condition <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+
+			dat$Killed <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_killed)', dat$Condition , perl=T))))
+
+			dat$Patches <- 0
+
+			if (as.numeric(unlist(gregexpr('patch', dat$Condition , perl=T)))>0) {
+				dat$Patches <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_patch)', dat$Condition , perl=T))))
+				}
+
+			dat$Ecology <- "N"
+
+			if (as.numeric(unlist(gregexpr('ecology', dat$Condition , perl=T)))>0) {
+				dat$Ecology <- "Y"
+				}
+
+
+			full.string <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+
+			seed <- tail(unlist(strsplit(full.string, split = "_", fixed = T)), n=1)
+
+
+			foo <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+			blah <- tail(unlist(strsplit(foo, split = "-", fixed = T)), n=1)
+			initial.pop <- head(unlist(strsplit(blah, split = "_", fixed = T)), n=1)
+
+			dat$Initial.Pop<-initial.pop		
+			dat$Seed <- as.numeric(as.character(seed))
+
+
+			results.data <- rbind(results.data, dat)
+			}
+		}
+	}
+
+
+
+
+
+backup.results.data<-results.data
+
+results.data<-backup.results.data
+
+#Include factors as factors
+results.data$Condition<-factor(results.data$Condition)
+results.data$Ecology<-factor(results.data$Ecology)
+results.data$Initial.Pop<-factor(results.data$Initial.Pop)
+
+
+#Convert numeric type to numeric
+results.data$Unique.Phenotypes.Task<-as.numeric(as.character(results.data$Unique.Phenotypes.Task))
+results.data$Shannon.Diversity<-as.numeric(as.character(results.data$Shannon.Diversity))
+results.data$Unique.Phenotype.Count<-as.numeric(as.character(results.data$Unique.Phenotype.Count))
+results.data$Average.Phenotype.Diversity<-as.numeric(as.character(results.data$Average.Phenotype.Diversity))
+results.data$Average.Task.Diversity<-as.numeric(as.character(results.data$Average.Task.Diversity))
+results.data$Fitness<-as.numeric(as.character(results.data$Fitness))
+results.data$Generation<-as.numeric(as.character(results.data$Generation))
+results.data$Unique.Genotypes<-as.numeric(as.character(results.data$Unique.Genotypes))
+results.data$Pop.Size<-as.numeric(as.character(results.data$Pop.Size))
+
+
+
+
+# Write these results to a data file.
+
+write.csv(results.data, file="Concatenated.Conservation.Data.Round.Two.csv")
+```
+
+Now we can do some high-level analysis:
+
+```{r, cache=TRUE}
+#This script was written by Mike Wiser
+cons.data <- read.table("Downloads/Concatenated.Conservation.Data.Round.Two.csv", sep=",", header=T)
+
+summary(cons.data)
+
+for (i in 1:length(cons.data$Update) ) {
+  if(cons.data$Update[i] < 100000) {
+    cons.data$Early.Termination[i] <- 1
+  }
+  if(cons.data$Update[i] == 100000) {
+    cons.data$Early.Termination[i] <- 0
+  }
+  if(cons.data$Patches[i] == 0) {
+    cons.data$Protected[i] <- 0
+  }
+  if(cons.data$Patches[i] > 0) {
+    cons.data$Protected[i] <- 1
+  }
+}
+
+
+
+cons.data$Killed.Factor <- factor(cons.data$Killed)
+cons.data$Patches.Factor <- factor(cons.data$Patches)
+
+anova(lm(Early.Termination ~ Ecology + Protected + Initial.Pop, data=cons.data, na.action=na.omit, model=T))
+anova(lm(Early.Termination ~ Ecology + Protected + Killed, data=cons.data, na.action=na.omit, model=T))
+
+anova(lm(Early.Termination ~ Ecology + Initial.Pop, data=cons.data, na.action=na.omit, model=T))
+anova(lm(Early.Termination ~ Ecology + Killed, data=cons.data, na.action=na.omit, model=T))
+
+
+eco.cons.data <- subset(cons.data, Ecology=="Y")
+evo.cons.data <- subset(cons.data, Ecology=="N")
+
+
+anova(lm(Shannon.Diversity ~ Initial.Pop, data=eco.cons.data, na.action=na.omit, model=T))
+anova(lm(Shannon.Diversity ~ Killed, data=eco.cons.data, na.action=na.omit, model=T))
+anova(lm(Shannon.Diversity ~ Killed.Factor, data=eco.cons.data, na.action=na.omit, model=T))
+anova(lm(Shannon.Diversity ~ Patches, data=eco.cons.data, na.action=na.omit, model=T))
+anova(lm(Shannon.Diversity ~ Patches.Factor, data=eco.cons.data, na.action=na.omit, model=T))
+
+foo <- subset(eco.cons.data, Patches > 0)
+bah <- subset(evo.cons.data, Patches > 0)
+
+anova(lm(Shannon.Diversity ~ Patches.Factor, data=foo, na.action=na.omit, model=T))
+anova(lm(Average.Task.Diversity ~ Patches.Factor, data=foo, na.action=na.omit, model=T))
+anova(lm(Average.Phenotype.Diversity ~ Patches.Factor, data=foo, na.action=na.omit, model=T))
+anova(lm(Unique.Phenotypes.Task ~ Patches.Factor, data=foo, na.action=na.omit, model=T))
+anova(lm(Unique.Phenotype.Count ~ Patches.Factor, data=foo, na.action=na.omit, model=T))
+
+plot(x=eco.cons.data$Patches.Factor, y=eco.cons.data$Shannon.Diversity, xlab="Number of Patches", ylab="Shannon Diversity")
+
+plot(x=eco.cons.data$Patches.Factor, y=eco.cons.data$Average.Task.Diversity, xlab="Number of Patches", ylab="Average Task Diversity")
+
+plot(x=eco.cons.data$Patches.Factor, y=eco.cons.data$Average.Phenotype.Diversity, xlab="Number of Patches", ylab="Average Phenotype Diversity")
+
+plot(x=eco.cons.data$Patches.Factor, y=eco.cons.data$Unique.Phenotypes.Task, xlab="Number of Patches", ylab="Unique Phenotypes Task")
+
+plot(x=eco.cons.data$Patches.Factor, y=eco.cons.data$Unique.Phenotype.Count, xlab="Number of Patches", ylab="Unique Phenotypes Count")
+
+anova(lm(Shannon.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+anova(lm(Average.Task.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+anova(lm(Average.Phenotype.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+anova(lm(Unique.Phenotypes.Task ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+anova(lm(Unique.Phenotype.Count ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+
+
+summary(lm(Shannon.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+summary(lm(Average.Task.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+summary(lm(Average.Phenotype.Diversity ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+summary(lm(Unique.Phenotypes.Task ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+summary(lm(Unique.Phenotype.Count ~ Patches.Factor, data=bah, na.action=na.omit, model=T))
+```
+
+Okay, all of that looks roughly reasonable. Let's break it down a bit:
+
+```{r, cache=TRUE}
+cons.data$Ecology <- as.character(cons.data$Ecology)
+cons.data$Ecology <- replace(cons.data$Ecology, which(cons.data$Ecology == "N"), "Mutations allowed")
+cons.data$Ecology <- replace(cons.data$Ecology, which(cons.data$Ecology == "Y"), "Ecology mode")
+cons.data$Ecology <- as.factor(cons.data$Ecology)
+ggplot(data=cons.data, aes(x=as.factor(Patches), group=Patches)) + geom_boxplot(aes(y=Unique.Phenotype.Count)) + facet_wrap(~Ecology) + scale_x_discrete("Number of patches") + scale_y_continuous("Phenotypic Richness at end of experiment")
+```
+
+Stats I want to include in the paper:
+
+```{r, cache=TRUE}
+summary(lm(Unique.Phenotype.Count ~ Patches, data=subset(eco.cons.data, Patches > 0), na.action=na.omit, model=T))
+#Check assumptions
+#plot(lm(Unique.Phenotype.Count ~ Patches, data=eco.cons.data, na.action=na.omit, model=T))
+#Well that sure violates normalacy
+summary(lm(log(Unique.Phenotype.Count) ~ log(Patches), data=subset(eco.cons.data, Patches > 0), na.action=na.omit, model=T))
+#plot(lm(log(Unique.Phenotype.Count) ~ log(Patches), data=subset(eco.cons.data, Patches > 0), na.action=na.omit, model=T))
+#Better...
+#Oh shoot, we're violating independence anyway. Bring on the mixed models!
+data <- subset(eco.cons.data, Patches > 0)
+data$Initial.Pop <- as.factor(data$Initial.Pop)
+
+eco_patch_number <- lmer(log(Unique.Phenotype.Count) ~ log(Patches) + (1|Initial.Pop), data=data, REML=FALSE)
+eco_patch_number_null <- lmer(log(Unique.Phenotype.Count) ~ 1 + (1|Initial.Pop), data=data, REML=FALSE)
+anova(eco_patch_number_null, eco_patch_number)
+summary(eco_patch_number)
+plot(resid(eco_patch_number) ~ log(data$Patches))
+```
+
+Well, that's a tiny but significant positive effect.
+
+```{r, cache=TRUE}
+data <- subset(evo.cons.data, Patches > 0)
+data$Initial.Pop <- as.factor(data$Initial.Pop)
+
+evo_patch_number <- lmer(log(Unique.Phenotype.Count) ~ log(Patches) + (1|Initial.Pop), data=data, REML=FALSE)
+evo_patch_number_null <- lmer(log(Unique.Phenotype.Count) ~ 1 + (1|Initial.Pop), data=data, REML=FALSE)
+anova(evo_patch_number_null, evo_patch_number)
+summary(evo_patch_number)
+plot(resid(evo_patch_number) ~ log(data$Patches))
+```
+
+Much larger effect.
+
+```{r, cache=TRUE}
+data <- subset(cons.data, Patches > 0)
+data$Initial.Pop <- as.factor(data$Initial.Pop)
+
+evo_effect <- lmer(Unique.Phenotype.Count ~ Ecology + (1|Initial.Pop), data=data, REML=FALSE)
+evo_effect_null <- lmer(Unique.Phenotype.Count ~ 1 + (1|Initial.Pop), data=data, REML=FALSE)
+anova(evo_effect_null, evo_effect)
+summary(evo_effect)
+plot(resid(evo_effect) ~ log(data$Patches))
+```
+
+```{r, eval=FALSE}
+#Written in collaboration with Mike Wiser
+######
+
+# Thoughts on how to calculate birth probabilities.
+
+# 1) Create matrix of cell connections. (3600 rows with 8 columns each)
+# 2) Create function to implement birth method.
+# 3) Create matrix that will serve as birth distribution map. (3600 by 3600)
+# 4) For a given row, call birth method function, add 1 to the column representing the
+#    birth location.
+# 5) Iterate across each row, many times each.
+# 6) Write .csv of this birth map.  It will be time intensive to make, but only needs to
+#    be done once.
+# 7) Create map of patches.  Label each patch differently, but same within patch. 
+# 8) Repeat 7 for each different patch configuration.
+# 9) Using map, find proportion of births from each cell that are into 
+#  a) Dead region
+# 	b) Same patch as parent (if parent was in a patch)
+#	c) Different patch from parent
+# 10) Average 9 across all patch cells. 
+
+
+##############
+
+# Step 1: Create matrix of cell connections:
+
+world.x <- 60
+world.y <- 60
+
+number.cells <- world.x * world.y
+
+connection.matrix <- matrix(nrow=number.cells, ncol=8)
+
+# Establish non-torroidal connections:
+
+for (i in 2:(world.y-1)) {
+	for (j in 2:(world.x-1)) {
+
+		current.cell <- ((i-1)*world.x + j)
+
+		connection.1 <- current.cell - (world.y + 1)
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- current.cell - (world.y - 1)
+		connection.4 <- current.cell - 1
+		connection.5 <- current.cell + 1
+		connection.6 <- current.cell + (world.y - 1)
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + (world.y + 1)
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		}
+	}
+
+# Left edge connections:
+
+for (i in 2:(world.y-1)) {
+	for (j in 1:1) {
+	
+		current.cell <- ((i-1)*world.x + j)
+
+		connection.1 <- current.cell - 1
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- current.cell - (world.y - 1)
+		connection.4 <- current.cell + world.x - 1
+		connection.5 <- current.cell + 1
+		connection.6 <- current.cell + (world.y + world.x) - 1
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + (world.y + 1)
+
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		}
+	}
+
+# Right edge connection:
+
+for (i in 2:(world.y-1)) {
+	for (j in world.x:world.x) {
+
+		current.cell <- ((i-1)*world.x + j)
+
+		connection.1 <- current.cell - (world.y + 1)
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- current.cell - (world.y + world.x) + 1
+		connection.4 <- current.cell - 1
+		connection.5 <- current.cell - world.x + 1
+		connection.6 <- current.cell + (world.y - 1)
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + 1
+
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		}
+	}
+
+# Top edge connections:
+
+
+for (i in 1:1) {
+	for (j in 2:(world.x-1)) {
+
+		current.cell <- ((i-1)*world.x + j)
+
+		connection.1 <- ((world.y-1)*world.x) + j - 1
+		connection.2 <- ((world.y-1)*world.x) + j  
+		connection.3 <- ((world.y-1)*world.x) + j + 1
+		connection.4 <- current.cell - 1
+		connection.5 <- current.cell + 1
+		connection.6 <- current.cell + (world.y - 1)
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + (world.y + 1)
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		}
+	}
+
+
+# Bottom edge connections:
+
+
+for (i in world.y:world.y) {
+	for (j in 2:(world.x-1)) {
+
+		current.cell <- ((i-1)*world.x + j)
+
+		connection.1 <- current.cell - (world.y + 1)
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- current.cell - (world.y - 1)
+		connection.4 <- current.cell - 1
+		connection.5 <- current.cell + 1
+		connection.6 <- j - 1
+		connection.7 <- j
+		connection.8 <- j + 1 
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		}
+	}
+
+# Upper left corner:
+
+		current.cell <- 1
+
+		connection.1 <- world.x*world.y
+		connection.2 <- (world.y-1)*world.x + 1
+		connection.3 <- (world.y-1)*world.x + 2
+		connection.4 <- world.x
+		connection.5 <- current.cell + 1
+		connection.6 <- world.y + world.x
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + (world.y + 1)
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+		
+
+# Upper right corner:
+
+		current.cell <- world.x
+
+		connection.1 <- world.x*world.y - 1
+		connection.2 <- world.x*world.y
+		connection.3 <- (world.y-1)*world.x + 1
+		connection.4 <- current.cell - 1
+		connection.5 <- 1
+		connection.6 <- current.cell + (world.y - 1)
+		connection.7 <- current.cell + (world.y )
+		connection.8 <- current.cell + 1
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+
+# Lower left corner:
+
+		current.cell <- (world.y-1)*world.x + 1
+
+		connection.1 <- current.cell - 1
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- current.cell - (world.y - 1)
+		connection.4 <- world.x * world.y
+		connection.5 <- current.cell + 1
+		connection.6 <- world.x
+		connection.7 <- 1
+		connection.8 <- 2
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+
+# Lower right corner:
+
+		current.cell <- world.x*world.y
+
+		connection.1 <- current.cell - (world.y + 1)
+		connection.2 <- current.cell - (world.y )
+		connection.3 <- (world.y-2)*world.x + 1
+		connection.4 <- current.cell - 1
+		connection.5 <- (world.y-1)*world.x + 1
+		connection.6 <- world.x - 1
+		connection.7 <- world.x
+		connection.8 <- 1
+		
+		connection.matrix[current.cell, 1] <- connection.1	
+		connection.matrix[current.cell, 2] <- connection.2
+		connection.matrix[current.cell, 3] <- connection.3
+		connection.matrix[current.cell, 4] <- connection.4
+		connection.matrix[current.cell, 5] <- connection.5
+		connection.matrix[current.cell, 6] <- connection.6
+		connection.matrix[current.cell, 7] <- connection.7
+		connection.matrix[current.cell, 8] <- connection.8
+
+################
+
+# We think a given cell may be listed as connected to itself.  Let's add a 9th
+# column that is the given cell too.
+
+own.cell<-matrix(nrow=number.cells, ncol=1)
+
+for(i in 1:number.cells) {
+	own.cell[i, 1] <- i
+	}
+
+connection.matrix <- cbind(own.cell, connection.matrix)
+
+################
+
+# Step 2: Create function of birth method.
+
+
+
+# Function to pick connection cell:
+
+pick.cell <- function(current.cell) {
+
+	new.cell <- connection.matrix[current.cell, sample(1:9, 1)]
+
+	return(new.cell)
+
+	}
+
+# Create map of cells into which organisms are born
+
+birth.map <- matrix(nrow=number.cells, ncol=number.cells)
+
+# Initialize birth.map to 0s
+
+for (i in 1:number.cells) {
+	for (j in 1:number.cells) {
+		birth.map[j, i] <- 0
+		}
+	}
+
+for (n in 1:100) {
+
+	for (m in 1:number.cells) {
+
+		# Draw number from Poisson distribution:
+
+		poisson.draw <- rpois(n=1, lambda=1)
+
+		current.cell <- m
+	
+		number.loops <- poisson.draw
+		new.cell <- current.cell
+		while (number.loops + 1 > 0) {
+			new.cell <- pick.cell(new.cell)
+			number.loops <- number.loops - 1
+			}
+
+		birth.map[m, new.cell] <- birth.map[m, new.cell] + 1
+
+		}
+
+	}
+	
+
+write.csv(birth.map, file="birth.map.csv")
+```
+
+Now we can load in the result of that simulation:
+
+```{r, cache=TRUE}
+birth.map <- read.csv("~/Downloads/birth.map.csv")
+w <- as.matrix(birth.map[,2:3601]) #convert to matrix and cut off label row
+w <- w/max(w) #normalize to [0, 1]. Note that we don't need to invert the distance matrix because these are probabilities of interaction between cells, not distances.
+diag(w) <- 0 #autocorrelation doesn't go up because a cell is connected to itself
+```
+
+We're going to look at the spatial autocorrelation of phylogenetic depth across the world. Phylogenetic depth
+measures how many mutations have occurred to a lineage over the course of a run of evolution. This is a good proxy for separating out clades and treating neutral mutants as appropriately similar. It is not perfect, though. Two organisms could have the same phylogenetic depth, but different phenotypes. Let's start by looking at phylogenetic depth for all 10 initial populations. First, we need to genrate spatial phylogeneitc depth grids from Avida's base output:
+
+```{r, engine='python', eval=FALSE}
+#Python code, because the libraries I needed are in Python and not R
+
+import avidaspatial #Python module I wrote 
+import glob
+
+def load_detail_file(filename, world_dims):
+    phylo_depth = 13
+    number = 4
+    cells = 17
+
+
+    world = avidaspatial.utils.initialize_grid(world_dims, "-1")
+    infile = open(filename)
+    for line in infile:
+        if line.strip().startswith("#"):
+            continue
+        sline = line.split()
+        if len(sline) < 20:
+            continue
+
+        if int(sline[number]) == 0:
+            continue
+
+        depth = sline[phylo_depth]
+        active_cells = [int(i) for i in sline[cells].split(",")]
+        for cell in active_cells:
+            world[cell // world_dims[1]][cell % world_dims[0]] = depth
+        
+    infile.close()
+    return world
+
+def write_new_grid(filename, world):
+    outfile = open(filename, "w")
+    for line in world:
+        #print line
+        outfile.write(",".join(line) + "\n")
+    outfile.close()
+
+#Make phylogenetic depth grid files for initial populations
+for filename in glob.glob("/home/emily/hpcc/conservation/initials/initial_pop*/detail-100000.spop"):
+    pop = filename.split("/")[-2].split("_")[-1]
+    world =  load_detail_file(filename, (60,60))
+    write_new_grid("phylo_depth_initial_"+pop, world)
+
+#Make phylogenetic depth grid files for end of experiments
+for filename in glob.glob("/home/emily/hpcc/conservation/round_2_results/*/data/detail-100000.spop"):
+    root = "/".join(filename.split("/")[:-1])
+    world =  load_detail_file(filename, (60,60))
+    write_new_grid(root+"/phylo_depth_grid", world)
+```
+
+Now we can read it in:
+
+```{r, cache=TRUE}
+phylo_depth_pop1 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_1", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop2 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_2", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop3 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_3", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop4 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_4", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop5 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_5", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop6 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_6", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop7 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_7", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop8 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_8", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop9 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_9", header=FALSE, na.strings=c(-1)))
+phylo_depth_pop10 <- as.matrix(read.csv("/media/emily/hdd/conservation/phylo_depth_initial_10", header=FALSE, na.strings=c(-1)))
+
+colnames(phylo_depth_pop1) <- 1:60
+colnames(phylo_depth_pop2) <- 1:60
+colnames(phylo_depth_pop3) <- 1:60
+colnames(phylo_depth_pop4) <- 1:60
+colnames(phylo_depth_pop5) <- 1:60
+colnames(phylo_depth_pop6) <- 1:60
+colnames(phylo_depth_pop7) <- 1:60
+colnames(phylo_depth_pop8) <- 1:60
+colnames(phylo_depth_pop9) <- 1:60
+colnames(phylo_depth_pop10) <- 1:60
+
+phenotypes_pop1 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_1/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop2 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_2/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop3 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_3/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop4 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_4/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop5 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_5/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop6 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_6/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop7 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_7/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop8 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_8/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop9 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_9/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+phenotypes_pop10 <- as.matrix(read.csv("/home/emily/hpcc/conservation/initials/initial_pop_10/grid_task.100000.dat", header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+
+colnames(phenotypes_pop1) <- 1:60
+colnames(phenotypes_pop2) <- 1:60
+colnames(phenotypes_pop3) <- 1:60
+colnames(phenotypes_pop4) <- 1:60
+colnames(phenotypes_pop5) <- 1:60
+colnames(phenotypes_pop6) <- 1:60
+colnames(phenotypes_pop7) <- 1:60
+colnames(phenotypes_pop8) <- 1:60
+colnames(phenotypes_pop9) <- 1:60
+colnames(phenotypes_pop10) <- 1:60
+
+
+phylo_depths <- list(phylo_depth_pop1, phylo_depth_pop2, phylo_depth_pop3, phylo_depth_pop4, phylo_depth_pop5, phylo_depth_pop6, phylo_depth_pop7, phylo_depth_pop8, phylo_depth_pop9, phylo_depth_pop10)
+
+
+comparison_plots <- function(phylo, pheno){
+  phylo_plot <- ggplot(data=melt(phylo), aes(Var1, Var2, fill=value, na.rm=TRUE)) + geom_tile()+ theme(legend.position="left", panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), #removes the grey panel in the background
+    axis.line = element_blank(), axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank()) + coord_fixed(ratio=1) + scale_fill_continuous("", na.value = "grey") + scale_x_continuous("") + scale_y_continuous("") + ggtitle("Phylogenetic Depth")
+  
+  pheno_plot <- ggplot(data=melt(pheno), aes(Var1, Var2, fill=as.factor(value), na.rm=TRUE)) + geom_tile() + theme(legend.position="bottom", panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), #removes the grey panel in the background
+    axis.line = element_blank(), axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank()) + scale_fill_discrete(na.value = "grey", guide="none") + coord_fixed(ratio=1)+ scale_x_continuous("") + scale_y_continuous("") + ggtitle("Phenotypes")
+
+  phylo_plot
+  pheno_plot
+  #ggdraw(phylo_plot) + draw_plot(pheno_plot, 0, 0, 1, .5)
+  plot_grid(phylo_plot, pheno_plot, nrow = 1, ncol = 2, rel_widths =c(1.25, 1) )
+}
+
+comparison_plots(phylo_depth_pop1, phenotypes_pop1)
+comparison_plots(phylo_depth_pop2, phenotypes_pop2)
+comparison_plots(phylo_depth_pop3, phenotypes_pop3)
+comparison_plots(phylo_depth_pop4, phenotypes_pop4)
+comparison_plots(phylo_depth_pop5, phenotypes_pop5)
+comparison_plots(phylo_depth_pop6, phenotypes_pop6)
+comparison_plots(phylo_depth_pop7, phenotypes_pop7)
+comparison_plots(phylo_depth_pop8, phenotypes_pop8)
+comparison_plots(phylo_depth_pop9, phenotypes_pop9)
+comparison_plots(phylo_depth_pop10, phenotypes_pop10)
+
+initial_morans <- lapply(phylo_depths, function(mat){Moran.I(as.vector(t(mat)), w, na.rm=TRUE)})
+initial_morans_df <- NULL
+
+for (i in 1:10){
+  initial_morans_df <- rbind(initial_morans_df, unlist(initial_morans[[i]]))
+}
+
+initial_morans_df <- as.data.frame(initial_morans_df)
+
+initial_morans_df$result <- initial_morans_df$observed - initial_morans_df$expected
+```
+
+Looks like all of the initial populations have significant spatial autocorrelation for phylogenetic depth. This is unsurprising. Indeed, it would be somewhat concerning if it were not the case. Initial populations 1, 3, and 4 seem to have somewhat lower levels of spatial autocorrelation than the rest of the the initial populations, but this is likely an artifact of them having less variation in phylogenetic depth (suggesting more recent divergence than in other populations).
+
+Let's compare phylogenetic depth before evolution to afterwards. There isn't really a good way to aggregate this across runs, so here's a representative example:
+
+```{r}
+phylo_after <- as.matrix(read.csv("/home/emily/hpcc/conservation/round_2_results/225_patches_2_cells_200_killed-pop6_13353/data/phylo_depth_grid", header=FALSE, sep=",", na.strings=c(-1, "NA"))[,1:60])
+colnames(phylo_after) <- 1:60
+
+before <- ggplot(data=melt(phylo_depth_pop6), aes(Var1, Var2, fill=value, na.rm=TRUE)) + geom_tile()+ theme(legend.position="left", panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), #removes the grey panel in the background
+    axis.line = element_blank(), axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank())  + scale_fill_continuous("", na.value = "grey") + scale_x_continuous("") + scale_y_continuous("") + ggtitle("Initial population")
+
+after <- ggplot(data=melt(phylo_after), aes(Var1, Var2, fill=value, na.rm=TRUE)) + geom_tile()+ theme(legend.position="left", panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), #removes the grey panel in the background
+    axis.line = element_blank(), axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank()) + scale_fill_continuous("", na.value = "grey") + scale_x_continuous("") + scale_y_continuous("") + ggtitle("After treatment")
+
+multiplot(before, after, cols=2)
+```
+
+This isn't a super useful visualization. We can see that a lot of cells are unoccupied, and that phylogenetic depth has increased (because evolution continued), but there isn't a clear correspondance between the two images. This will be a lot more useful when examining images from the ecology mode control:
+
+```{r}
+phylo_after_eco <- as.matrix(read.csv("/home/emily/hpcc/conservation/round_2_results/225_patches_2_cells_200_killed_ecology-pop6_18353/data/phylo_depth_grid", header=FALSE, sep=",", na.strings=c(-1, "NA"))[,1:60])
+colnames(phylo_after_eco) <- 1:60
+
+after <- ggplot(data=melt(phylo_after_eco), aes(Var1, Var2, fill=value, na.rm=TRUE)) + geom_tile()+ theme(legend.position="left", panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), #removes the grey panel in the background
+    axis.line = element_blank(), axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank()) + scale_fill_continuous("", na.value = "grey") + scale_x_continuous("") + scale_y_continuous("") + ggtitle("After treatment")
+
+multiplot(before, after, cols=2)
+```
+
+This image actually tells us something. We can see that in general there is much higher contrast between regions in this image. That's likely the result of netural and lower fitness mutants drifting/being competed out. We can also see that the range of phylogenetic depths present has decreased. This suggests that we lost the clade that was most different from the ancestor.
+
+```{r, cache=TRUE}
+coords = matrix(0, byrow = TRUE, nrow=3600, ncol=2)
+for (i in 1:60){
+  for (j in 1:60){
+    coords[(i-1)*60+j, 1] <- i
+    coords[(i-1)*60+j, 2] <- j
+  }
+}
+
+plot_variogram <- function(mat){
+  v = variog(coords = coords, data=as.vector(mat))
+  plot(v)
+  v_fit <-variofit(v, ini.cov.pars=c(v$v[8], 20), cov.model="exponential", minimisation.function="nls", weights="equal", na.rm=TRUE)
+  lines(v_fit)
+}
+
+plot_variogram(phylo_depth_pop1)
+plot_variogram(phylo_depth_pop2)
+#etc. Further variograms result in errors, due to werid behavior induced by toroidal grid
+```
+
+These variograms aren't taking into account the fact that the grid is toroidal. However, if you look at the first half of the curve, you can see a continuous increase in semivariance with distance. This essentially suggests that there is no distance within the world above which there is no effect of spatial autocorrelation. Given that spatial autocorrelation is pretty much the only thing going on in these initial populations, that makes sense.
+
+Now let's extract information about species-area relationships. This will take a long time, so I ran it on the HPCC:
+
+```{r, eval=FALSE, cache=TRUE}
+
+
+get_patch_diversity <- function(mat, n, size){
+  alpha_shannon_entropy <- vector(mode = "numeric", length=n)
+  alpha_richness <- vector(mode = "numeric", length=n)
+  patch_size <- rep(c(size), n)
+  result <- data.frame(alpha_shannon_entropy, alpha_richness, patch_size)
+  #result
+  sum_mat <- c()
+  for (i in 0:(n-1)){
+    x <- ((i %% sqrt(n))*size*2) + 1
+    y <- ((i %/% sqrt(n))*size*2) + 1
+    patch <- mat[x:(x+size-1), y:(y+size-1)]
+    result[i+1, 2] <- length(unique(as.vector(patch)))
+    result[i+1, 1] <- entropy(table(patch), unit="log2")
+    sum_mat <- c(sum_mat, patch) 
+  }
+  result$gamma_richness <- length(unique(as.vector(mat)))
+  result$gamma_shannon_entropy <- entropy(table(mat), unit="log2")
+  result$captured_richness <- length(unique(as.vector(sum_mat)))
+  result$captured_shannon_entropy <- entropy(table(sum_mat), unit="log2")
+  return(result)
+}
+
+dirs <- list.dirs(path = "/home/emily/hpcc/conservation/round_2_results", recursive=FALSE)
+
+sar_data <- NULL
+per_run_analysis <- NULL
+#colnames(sar_data) <- c("seed", "killed", "ecology", "richness", "shannon_entropy", "patch_size")
+
+
+for (d in sample(dirs, 100)){
+  start_file <- paste(d, "data", "grid_task.0.dat", sep="/")
+  end_file <- paste(d, "data", "grid_task.100000.dat", sep="/")
+  phylo_file <- paste(d, "data", "phylo_depth_grid", sep="/")
+  print(d)
+  if (file.exists(start_file) & file.exists(end_file)){
+    condition  <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+    killed <- as.numeric(unlist(regmatches(condition, gregexpr('\\d+(?=_killed)', condition , perl=T))))
+    
+    reserves <- FALSE
+    
+    patches <- 1
+    if (as.numeric(unlist(gregexpr('patch', condition , perl=T)))>0) {
+				patches <- as.numeric(unlist(regmatches(condition, gregexpr('\\d+(?=_patch)', condition , perl=T))))
+        reserves <- TRUE
+    }
+    
+    cells <- 60
+    if (as.numeric(unlist(gregexpr('cell', condition , perl=T)))>0) {
+  			cells <- as.numeric(unlist(regmatches(condition, gregexpr('\\d+(?=_cell)', condition , perl=T))))
+    }
+
+    ecology <- FALSE
+
+  	if (as.numeric(unlist(gregexpr('ecology', condition , perl=T)))>0) {
+				ecology <- TRUE
+		}
+
+    full.string <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
+    seed <- tail(unlist(strsplit(full.string, split = "_", fixed = T)), n=1)
+
+  	condition_end <- tail(unlist(strsplit(full.string, split = "-", fixed = T)), n=1)
+		initial_pop <- head(unlist(strsplit(condition_end, split = "_", fixed = T)), n=1)
+
+    
+    start_mat <- as.matrix(read.csv(start_file, header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+    start <- get_patch_diversity(start_mat, patches, cells)
+    start$update <- 0
+    
+    end_mat <- as.matrix(read.csv(end_file, header=FALSE, sep = " ", na.strings=c(-1))[, 1:60])
+    end <- get_patch_diversity(end_mat, patches, cells)
+    end$update <- 100000
+    
+    phylo_mat <- as.matrix(read.csv(phylo_file, header=FALSE, sep = ",", na.strings=c(-1))[, 1:60])
+    
+    data <- rbind(start, end)
+    data$seed <- seed
+    data$patches <- patches
+    data$ecology <- ecology
+    data$reserves <- reserves
+    data$killed <- killed
+    data$condition <- condition
+    data$initial_pop <- initial_pop
+
+    tmp <- data.frame(seed=c(seed))
+    tmp$patches <- patches
+    tmp$ecology <- ecology
+    tmp$reserves <- reserves
+    tmp$killed <- killed
+    tmp$condition <- condition
+    tmp$initial_pop <- initial_pop
+    tmp$patch_size <- cells
+    m <- Moran.I(replace(as.vector(t(end_mat)), is.na(as.vector(t(end_mat))), 0), w)
+    tmp$end_moran <- m$observed - m$expected
+    tmp$lost_phenotypes <- length(setdiff(as.vector(start_mat), as.vector(end_mat)))
+    tmp$new_phenotypes <- length(setdiff(as.vector(end_mat), as.vector(start_mat)))
+    sar_data <- rbind(sar_data, data)
+    per_run_analysis <- rbind(per_run_analysis, tmp)
+  }
+}
+
+```
+
+Now we can load the data from the HPCC in:
+
+```{r, cache=TRUE}
+patch_data <- read.csv("patch_data.csv") #data on patches (multiple per run)
+per_run_analysis <- read.csv("per_run_analysis.csv") #data on global dyamics (1 per run) 
+
+#Let's save out some subsets we'll use a lot
+end_evolution_data <- subset(patch_data, update==100000 & reserves==TRUE & ecology==FALSE)
+end_evolution_data$seed <- as.factor(end_evolution_data$seed)
+
+end_ecology_data <- subset(patch_data, update==100000 & reserves==TRUE & ecology==TRUE)
+end_ecology_data$seed <- as.factor(end_ecology_data$seed)
+
+start_data <- subset(patch_data, update==0 & reserves==TRUE)
+start_data$seed <- as.factor(start_data$seed)
+
+end_data <- subset(patch_data, update==100000 & reserves==TRUE)
+end_data$seed <- as.factor(end_data$seed)
+
+end_data_per_run <- subset(per_run_analysis, reserves==TRUE)
+end_data_per_run$seed <- as.factor(end_data_per_run$seed)
+
+end_evolution_data_per_run <- subset(per_run_analysis, reserves==TRUE & ecology==FALSE)
+end_evolution_data_per_run$seed <- as.factor(end_evolution_data_per_run$seed)
+
+end_ecology_data_per_run <- subset(per_run_analysis, reserves==TRUE & ecology==TRUE)
+end_ecology_data_per_run$seed <- as.factor(end_ecology_data_per_run$seed)
+
+
+```
+
+Let's compare alpha diveristy with the amount of gamma diversity captured across patch sizes .
+
+```{r, cache=TRUE}
+aggdata <- aggregate(start_data,by=list(start_data$patch_size), FUN=mean)
+ggplot(data=start_data, #Let's look at data from the initial populations
+aes(group=(patch_size^2), #patch_size variable is edge length
+x=patch_size^2)) +
+geom_boxplot(aes(y=captured_richness, fill="Total captured richness"), outlier.colour = "blue",
+outlier.size = 2, alpha=.5) +
+geom_boxplot(aes(y=alpha_richness, fill="Alpha richness"), outlier.colour = "red",
+outlier.shape = "*", outlier.size = 4, alpha=.5) +
+scale_x_log10("Reserve area", breaks=c(1,4,9,25,36,100,15*15,900)) + scale_y_continuous("Richness", breaks=c(1,10,100)) + coord_trans(y = "log10") +
+scale_fill_manual("", values=c("red", "blue")) + theme_classic() + theme(legend.position="bottom",
+axis.line.y=element_line(color="black"), axis.line.x=element_line(color="black"), axis.text=element_text(colour = "black", size=14), axis.title=element_text(size = 20), legend.text=element_text(size=20), strip.text.x=element_text(size=20)) + geom_text(data=aggdata, aes(label=round(captured_richness, digits = 0), y=captured_richness*2), colour="darkblue", size=5) + geom_text(data=aggdata, aes(label=round(alpha_richness, digits = 0), y= alpha_richness/2.8+.3-.9*(alpha_richness>4 & alpha_richness < 13)+1.5*(alpha_richness>22)+9*(alpha_richness>70)), colour="darkred", size=5)
+
+ggsave("CapturedRichness.png",width = 7, height = 5, units = "in")
+
+summary(lm(data=start_data, log(alpha_richness) ~ log(patch_size^2)))
+```
+
+This data demonstrates the standard species-area relationship. log(patch area) and log(richness) increase linearly. However, the amount of richness captured across different patch sizes is relatively constant.
+
+```{r, cache=TRUE}
+summary(lm(data=start_data, log(captured_richness) ~ log(patch_size^2)))
+```
+
+In fact there is a significant inverse relationship between patch size and captured richness. The effect size is small, and explains so little variance in captured richness that it's probably not actually worth discussing. But just saying.
+
+This suggests that we are indeed in the scenario described by Simberloff and Abele - because the smaller patches are spread across the environment, they are sampling from different species pools.
+
+Let's take a look at what happens after the treatment:
+
+```{r, cache=TRUE}
+label_converter <- c("TRUE"="No mutations", "FALSE"="Mutations allowed")
+
+aggdata <- aggregate(end_data,by=list(end_data$patch_size, end_data$ecology), FUN=mean)
+aggdata$ecology <- as.character(aggdata$Group.2) #There is a bug in facet-grid that causes everything to break if this is a bool
+ggplot(data=end_data,
+       aes(group=(patch_size^2), #patch_size variable is edge length 
+      x=patch_size^2)) + coord_trans(y = "log10") + geom_boxplot(aes(y=captured_richness, fill="Total captured richness"), outlier.colour = "blue", outlier.size = 2, alpha=.5) + geom_boxplot(aes(y=alpha_richness, fill="Alpha richness"), outlier.colour = "red", 
+               outlier.shape = "*", outlier.size = 4, alpha=.5) + scale_x_log10("Reserve area", breaks=c(1,4,9,25,36,100,15*15,900), labels=c(1,4,9,"25  ","  36",100,15*15,900)) + scale_y_continuous("Richness", breaks=c(1,10,100)) + scale_fill_manual("", values=c("red", "blue")) + theme_classic() + theme(legend.position="bottom",
+    axis.line.y=element_line(color="black"), axis.line.x=element_line(color="black"), axis.text.y=element_text(colour = "black", size=12), axis.text.x = element_text(colour = "black", size=12), axis.title=element_text(size = 16), legend.text=element_text(size=16), strip.text.x=element_text(size=16)) + geom_text(data=aggdata, aes(label=round(captured_richness, digits = 0), y=captured_richness*3+.8+8*(ecology=="TRUE" & patch_size==2) + 20*(ecology=="FALSE" & patch_size==6) - 50*(ecology=="FALSE" & patch_size==5)), colour="darkblue", size=4) + geom_text(data=aggdata, aes(label=round(alpha_richness, digits = 0), y= (alpha_richness/7)*(ecology !="TRUE" & patch_size > 10) + .65*(ecology=="TRUE" | patch_size < 11)), colour="darkred", size=4) +  facet_grid(.~ecology, labeller=labeller(.default = as.character, ecology = label_converter))
+ggsave("CapturedRichnessEnd.png",width = 7, height =  4.5, units = "in")
+ 
+```
+
+Allowing evolution to proceed for 100,000 generations maintains the species area relationship.
+
+```{r, cache=TRUE}
+summary(lm(log(alpha_richness) ~ log(patch_size^2), data=end_evolution_data))
+```
+
+Although its slope is slightly decreased. We can also see that the negative correlation between patch size
+and richness captured across patches has strengthened.
+
+```{r, cache=TRUE}
+summary(lm(log(captured_richness) ~ log(patch_size^2), data=end_evolution_data))
+```
+
+Whereas each additional cell in a reserve decreased the total number of species in protected regions by ~1/3  at the beggining of the experiment, adding an additional cell to a reserve results in a decrease of ~2.5 species in protected regions at the end of the experiment. 
+
+These effects are also present in the ecology mode control, but they are substantially weaker:
+
+```{r, cache=TRUE}
+summary(lm(alpha_richness ~ patch_size^2, data=end_ecology_data))
+summary(lm(captured_richness ~ patch_size^2, data=end_ecology_data))
+```
+
+The increased benefit of small patches to captured richness when evolution is allowed could be driven by a number of potential factors:
+* Evolution might increase spatial autocorrelation, resulting in more wildly different species pools for different reserves to draw from.
+* More smaller patches might promote evolutionary maintenance of existing phenotypes
+* More smaller patches might promote evolutionary generation of novel phenotypes.
+
+First lets take a quick look at spatial autocorellation across treatments:
+
+```{r, cache=TRUE, eval=FALSE}
+initial_morans_df$label <- "Initial"
+initial_morans_df$patch_size <- 1
+initial_morans_df$end_moran <- initial_morans_df$result
+
+end_data$label <- end_data$ecology
+end_data$label <- replace(end_data$label, which(end_data$label, arr.ind = TRUE), "Ecology mode")
+end_data$label <- replace(end_data$label, which((end_data$label==FALSE)), "Mutations allowed")
+
+ggplot(data=end_data,
+       aes(group=(patch_size^2), #patch_size variable is edge length 
+      x=log(patch_size^2), y=end_moran)) + 
+  geom_boxplot() + 
+  geom_boxplot(data=initial_morans_df) +
+  scale_x_continuous("Log reserve area") + scale_y_continuous("Moran's I (observed - expected)") +
+  facet_wrap(~label, scales="free_x")
+```
+Looks like spatial autocorrelation is more consistently high when mutations are allowed. This makes sense - when new innovations are occuring and spreading spatially, spatial autocorrelation is maintained, whereas there can be a lot more drift in ecology mode. Additionally, the far smaller number of phenotypes left after 100,000 updates in ecology mode probably allows for far lower autocorrelation (which might explain the dramatically higher variance). Larger patch areas result in higher spatial autocorrelation, probably as a result of decreased dispersal between patches.
+
+Now let's look at maintenance and generation of phenotypes:
+
+```{r, cache=TRUE}
+
+label_converter <- c("TRUE"="No mutations", "FALSE"="Mutations allowed")
+aggdata <- aggregate(end_data_per_run,by=list(end_data_per_run$patch_size, end_data_per_run$ecology), FUN=mean)
+aggdata$ecology <- as.character(aggdata$Group.2) #There is a bug in facet-grid that causes everything to break if this is a bool
+ggplot(data=end_data_per_run,
+       aes(group=(patch_size^2), #patch_size variable is edge length 
+      x=patch_size^2)) + coord_trans(y = "log10") + 
+  geom_boxplot(aes(y=lost_phenotypes, fill="Lost phenotypes"), outlier.colour = "red", 
+               outlier.size = 2, alpha=.5) + 
+  geom_boxplot(aes(y=new_phenotypes, fill="Newly evolved phenotypes"), outlier.colour = "blue", 
+               outlier.shape = "*", outlier.size = 4, alpha=.5) + scale_x_log10("Reserve area", breaks=c(1,4,9,25,36,100,15*15,900), labels=c(1,4,9,"25  ","  36",100,15*15,900)) + scale_y_continuous("Richness", limits = c(.8,380), breaks=c(1,10,100)) + scale_fill_manual("", values=c("red", "blue")) + theme_classic() + theme(legend.position="bottom",
+    axis.line.y=element_line(color="black"), axis.line.x=element_line(color="black"), axis.text.y=element_text(colour = "black", size=12), axis.title=element_text(size = 16), axis.text.x = element_text(colour = "black", size=12), legend.text=element_text(size=16), strip.text.x=element_text(size=16)) + geom_text(data=aggdata, aes(label=round(new_phenotypes, digits = 0), y=(.6*(patch_size^2 < 800 & new_phenotypes>0))+(1*(patch_size^2 < 30 & new_phenotypes>0))+.8*(new_phenotypes>0)), colour="darkblue", size=4) + geom_text(data=aggdata, aes(label=round(lost_phenotypes, digits = 0), y= 300+(80*(patch_size^2==36)-(30*(patch_size^2==25)))), colour="darkred", size=4) +  facet_grid(.~ecology, labeller=labeller(.default = as.character, ecology = label_converter))
+
+
+ggsave("DiversityGenerationMaintenance.png",width = 7, height = 4.5, units = "in")
+
+lost_phen_lm <- lm(lost_phenotypes ~ patch_size^2, data=end_evolution_data_per_run) #let's see if we can get away with not taking the log so we don't have to worry about 0s
+
+plot(lost_phen_lm$residuals ~ end_evolution_data_per_run$patch_size^2) #hmmm... not so much. There's a clear curve there
+
+lost_phen_lm <- lm(lost_phenotypes ~ log(patch_size^2), data=end_evolution_data_per_run) #how about we just log patches?
+
+plot(lost_phen_lm$residuals ~ log(end_evolution_data_per_run$patch_size^2)) #much better!
+#plot(lost_phen_lm) #Other diagnostics look good too!
+summary(lost_phen_lm)
+
+#Of course, these totally aren't independent. Let's explicitly model the effect of initial population
+lost_phen_lm <- lmer(lost_phenotypes ~ log(patch_size^2) + (1|initial_pop), data=end_evolution_data_per_run, REML=FALSE)
+lost_phen_lm_null <- lmer(lost_phenotypes ~ 1 + (1|initial_pop), data=end_evolution_data_per_run, REML = FALSE)
+
+summary(lost_phen_lm)
+anova(lost_phen_lm_null, lost_phen_lm)
+
+summary(lm(new_phenotypes ~ log(patch_size^2), data=end_evolution_data_per_run))
+summary(lm(lost_phenotypes ~ log(patch_size^2), data=end_ecology_data_per_run))
+summary(lm(lost_phenotypes ~ log(patch_size^2)*ecology, data=end_data_per_run))
+```
+
+Looks like it's a little of each - smaller patches lose fewer phenotypes and generate more when evolution occurs. Interestingly, there is no relationship between phenotype loss and patch area when mutations are turned off. Additionally, all runs in which mutations were allowed lost significantly less fewer phenotypes than runs in which evolution did not occur.
+
+Figure for proposal:
+
+
+```{r}
+ggplot(data=subset(end_data_per_run, !ecology), 
+       aes(group=(patch_size^2), #patch_size variable is edge length 
+      x=log(patch_size^2))) + 
+  geom_boxplot(aes(y=log(lost_phenotypes), fill="Lost phenotypes"), outlier.colour = "red", 
+               outlier.size = 2, alpha=1) + 
+  geom_boxplot(aes(y=log(new_phenotypes), fill="Newly evolved phenotypes"), outlier.colour = "lightblue", 
+               outlier.shape = "*", outlier.size = 4, alpha=1) +
+  scale_x_continuous("Log reserve area") + scale_y_continuous("Log richness") +
+  scale_fill_manual("", values=c("red", "lightblue")) +theme_classic() + theme(legend.position="bottom", axis.line.x=element_line(color="black"), axis.line.y=element_line(color="black"), axis.text=element_text(colour = "black", size=12), axis.title=element_text(size = 14), legend.text=element_text(size=12))
+
+ggsave("DiversityGenerationMaintenance.png",width = 7, units = "in")
+```
+
+```{r, cache=TRUE}
+ggplot(data=subset(end_data, !ecology),
+       aes(group=(patch_size^2), #patch_size variable is edge length 
+      x=log(patch_size^2))) + 
+  geom_boxplot(aes(y=log(captured_richness), fill="Total captured richness"), outlier.colour = "lightblue", 
+               outlier.size = 2, alpha=1) + 
+  geom_boxplot(aes(y=log(alpha_richness), fill="Alpha richness"), outlier.colour = "red", 
+               outlier.shape = "*", outlier.size = 4, alpha=1) +
+  scale_x_continuous("Log patch area") + scale_y_continuous("Log richness") +
+  scale_fill_manual("", values=c("red", "lightblue")) + theme(legend.position="bottom") + theme( panel.grid.major = element_blank(), #removes the grid associated with major tick marks
+    panel.grid.minor = element_blank(), #removes the grid associated with minor tick marks
+    panel.background = element_blank(), axis.line=element_line("black"), axis.text=element_text(colour = "black", size=12), axis.title=element_text(size = 14), legend.text=element_text(size=12))+ coord_fixed(ratio = 1.5)+guides(fill=guide_legend(nrow=2,byrow=TRUE))
+
+ggsave("CapturedRichnessEnd_ForProposal.png",width = 2.38, units = "in")
+ 
+```
+
+Connectivity Figure:
+
+```{r}
+
+birth_map <- read.csv("~/Downloads/birth.map.csv")
+birth_map$X <- NULL
+
+cell_lookup <- function(x, y){
+  y*x + x
+}
+
+size = 30
+
+for (i in 1:)
+
+sum_mat <- c()
+x <- ((0 %% sqrt(n))*size*2) + 1
+y <- ((0 %/% sqrt(n))*size*2) + 1
+patch <- birth_map[x:(x+size-1), y:(y+size-1)]
+
+```
+
+
+New and improved stats from Mike (now with effect sizes!):
+
+Evolution phenotype loss:
+```{r}
+#setwd("/Users/mmgdepartment/Dropbox/Conservation")
+# This will need a data frame
+# I am making some assumptions about what things are called; feel free to change them but it may be easier
+# to change the names of the variables in what you feed into my code than change all the instances of
+# those names in my code.
+# For the data frame, I am assuming a structure with columns of:
+# Ancestral.Population -- which of the 10 pops the replicate started from
+# Reserve.Side -- what is the length of the side of an individual reserve
+# Random.Seed -- The random seed used in a run.
+# Lost.Phenotypes -- a number telling us how many phenotypes were lost.
+#data.for.ANOVA <- read.table(file="Dummy.Data.For.ANOVAs.csv", sep=",", header=T)
+data.for.ANOVA <- end_evolution_data_per_run
+data.for.ANOVA$patches <- NULL
+data.for.ANOVA$X <- NULL
+data.for.ANOVA$ecology <- NULL
+data.for.ANOVA$reserves <- NULL
+data.for.ANOVA$condition <- NULL
+data.for.ANOVA$killed <- NULL
+data.for.ANOVA$new_phenotypes <- NULL
+data.for.ANOVA <- data.for.ANOVA[, c(2,3,1,4)]
+colnames(data.for.ANOVA) <- c("Ancestral.Population", "Reserve.Side", "Random.Seed", "Lost.Phenotypes")
+data.for.ANOVA$Ancestral.Population <- factor(data.for.ANOVA$Ancestral.Population)
+data.for.ANOVA$Random.Seed<- factor(data.for.ANOVA$Random.Seed)
+anova.lost<-aov(Lost.Phenotypes ~ Error(Reserve.Side*Ancestral.Population), data=data.for.ANOVA)
+#Lost
+#Headers
+#Reserve
+#Population
+#Interaction
+#Error
+#Total
+anova.table.lost <- matrix(nrow = 7, ncol = 6)
+anova.table.lost[1, 1] <- "Lost Phenotypes"
+anova.table.lost[2, 1] <- "Source"
+anova.table.lost[2, 2]<-"SS"
+anova.table.lost[2, 3]<-"df"
+anova.table.lost[2, 4]<-"MS"
+anova.table.lost[2, 5]<-"F"
+anova.table.lost[2, 6]<-"p"
+anova.table.lost[3, 1] <- "Reserve Side"
+anova.table.lost[3, 2] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[2]])), digits=5)
+anova.table.lost[3, 3] <- as.numeric(as.character(summary(anova.lost)[[1]][[1]][[1]]))
+anova.table.lost[3, 4] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[3]])), digits=5)
+anova.table.lost[4, 1] <- "Ancestral Population"
+anova.table.lost[4, 2] <- round(as.numeric(as.character(summary(anova.lost)[[2]][[1]][[2]])), digits=5)
+anova.table.lost[4, 3] <- as.numeric(as.character(summary(anova.lost)[[2]][[1]][[1]]))
+anova.table.lost[4, 4] <- round(as.numeric(as.character(summary(anova.lost)[[2]][[1]][[3]])), digits=5)
+anova.table.lost[5, 1] <- "Interaction"
+anova.table.lost[5, 2] <- round(as.numeric(as.character(summary(anova.lost)[[3]][[1]][[2]])), digits=5)
+anova.table.lost[5, 3] <- as.numeric(as.character(summary(anova.lost)[[3]][[1]][[1]]))
+anova.table.lost[5, 4] <- round(as.numeric(as.character(summary(anova.lost)[[3]][[1]][[3]])), digits=5)
+anova.table.lost[6, 1] <- "Error"
+anova.table.lost[6, 2] <- round(as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]])), digits=5)
+anova.table.lost[6, 3] <- as.numeric(as.character(summary(anova.lost)[[4]][[1]][[1]]))
+anova.table.lost[6, 4] <- round(as.numeric(as.character(summary(anova.lost)[[4]][[1]][[3]])), digits=5)
+anova.table.lost[7, 1] <- "Total"
+anova.table.lost[7, 2] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[2]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[3]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]])), digits=5)
+anova.table.lost[7, 3] <- as.numeric(as.character(summary(anova.lost)[[1]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[2]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[3]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]]))
+anova.table.lost[7, 4] <- round(as.numeric(as.character(anova.table.lost[7,2]))/as.numeric(as.character(anova.table.lost[7,3])), digits=5)
+anova.table.lost[3, 5] <- round(as.numeric(as.character(anova.table.lost[3, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[4, 5] <- round(as.numeric(as.character(anova.table.lost[4, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[5, 5] <- round(as.numeric(as.character(anova.table.lost[5, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[3, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[3, 5])), as.numeric(as.character(anova.table.lost[3, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+anova.table.lost[4, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[4, 5])), as.numeric(as.character(anova.table.lost[4, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+anova.table.lost[5, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[5, 5])), as.numeric(as.character(anova.table.lost[5, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+if(as.numeric(as.character(anova.table.lost[3,6]))<0.0001) { anova.table.lost[3,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.lost[4,6]))<0.0001) { anova.table.lost[4,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.lost[5,6]))<0.0001) { anova.table.lost[5,6]<-"< 0.0001"}
+etta.sq <- as.numeric(as.character(anova.table.lost[3, 2])) / ( as.numeric(as.character(anova.table.lost[3, 2])) + as.numeric(as.character(anova.table.lost[6, 2])) )
+etta.sq
+# etta.sq is the effect size calculation in its simplest calculated form.
+```
+
+Ecology phenotype loss:
+```{r}
+#setwd("/Users/mmgdepartment/Dropbox/Conservation")
+# This will need a data frame
+# I am making some assumptions about what things are called; feel free to change them but it may be easier
+# to change the names of the variables in what you feed into my code than change all the instances of
+# those names in my code.
+# For the data frame, I am assuming a structure with columns of:
+# Ancestral.Population -- which of the 10 pops the replicate started from
+# Reserve.Side -- what is the length of the side of an individual reserve
+# Random.Seed -- The random seed used in a run.
+# Lost.Phenotypes -- a number telling us how many phenotypes were lost.
+#data.for.ANOVA <- read.table(file="Dummy.Data.For.ANOVAs.csv", sep=",", header=T)
+data.for.ANOVA <- end_ecology_data_per_run
+data.for.ANOVA$patches <- NULL
+data.for.ANOVA$X <- NULL
+data.for.ANOVA$ecology <- NULL
+data.for.ANOVA$reserves <- NULL
+data.for.ANOVA$condition <- NULL
+data.for.ANOVA$killed <- NULL
+data.for.ANOVA$new_phenotypes <- NULL
+data.for.ANOVA <- data.for.ANOVA[, c(2,3,1,4)]
+colnames(data.for.ANOVA) <- c("Ancestral.Population", "Reserve.Side", "Random.Seed", "Lost.Phenotypes")
+data.for.ANOVA$Ancestral.Population <- factor(data.for.ANOVA$Ancestral.Population)
+data.for.ANOVA$Random.Seed<- factor(data.for.ANOVA$Random.Seed)
+anova.lost<-aov(Lost.Phenotypes ~ Error(Reserve.Side*Ancestral.Population), data=data.for.ANOVA)
+#Lost
+#Headers
+#Reserve
+#Population
+#Interaction
+#Error
+#Total
+anova.table.lost <- matrix(nrow = 7, ncol = 6)
+anova.table.lost[1, 1] <- "Lost Phenotypes"
+anova.table.lost[2, 1] <- "Source"
+anova.table.lost[2, 2]<-"SS"
+anova.table.lost[2, 3]<-"df"
+anova.table.lost[2, 4]<-"MS"
+anova.table.lost[2, 5]<-"F"
+anova.table.lost[2, 6]<-"p"
+anova.table.lost[3, 1] <- "Reserve Side"
+anova.table.lost[3, 2] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[2]])), digits=5)
+anova.table.lost[3, 3] <- as.numeric(as.character(summary(anova.lost)[[1]][[1]][[1]]))
+anova.table.lost[3, 4] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[3]])), digits=5)
+anova.table.lost[4, 1] <- "Ancestral Population"
+anova.table.lost[4, 2] <- round(as.numeric(as.character(summary(anova.lost)[[2]][[1]][[2]])), digits=5)
+anova.table.lost[4, 3] <- as.numeric(as.character(summary(anova.lost)[[2]][[1]][[1]]))
+anova.table.lost[4, 4] <- round(as.numeric(as.character(summary(anova.lost)[[2]][[1]][[3]])), digits=5)
+anova.table.lost[5, 1] <- "Interaction"
+anova.table.lost[5, 2] <- round(as.numeric(as.character(summary(anova.lost)[[3]][[1]][[2]])), digits=5)
+anova.table.lost[5, 3] <- as.numeric(as.character(summary(anova.lost)[[3]][[1]][[1]]))
+anova.table.lost[5, 4] <- round(as.numeric(as.character(summary(anova.lost)[[3]][[1]][[3]])), digits=5)
+anova.table.lost[6, 1] <- "Error"
+anova.table.lost[6, 2] <- round(as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]])), digits=5)
+anova.table.lost[6, 3] <- as.numeric(as.character(summary(anova.lost)[[4]][[1]][[1]]))
+anova.table.lost[6, 4] <- round(as.numeric(as.character(summary(anova.lost)[[4]][[1]][[3]])), digits=5)
+anova.table.lost[7, 1] <- "Total"
+anova.table.lost[7, 2] <- round(as.numeric(as.character(summary(anova.lost)[[1]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[2]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[3]][[1]][[2]])) + as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]])), digits=5)
+anova.table.lost[7, 3] <- as.numeric(as.character(summary(anova.lost)[[1]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[2]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[3]][[1]][[1]])) + as.numeric(as.character(summary(anova.lost)[[4]][[1]][[2]]))
+anova.table.lost[7, 4] <- round(as.numeric(as.character(anova.table.lost[7,2]))/as.numeric(as.character(anova.table.lost[7,3])), digits=5)
+anova.table.lost[3, 5] <- round(as.numeric(as.character(anova.table.lost[3, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[4, 5] <- round(as.numeric(as.character(anova.table.lost[4, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[5, 5] <- round(as.numeric(as.character(anova.table.lost[5, 4])) / as.numeric(as.character(anova.table.lost[6, 4])), digits=5)
+anova.table.lost[3, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[3, 5])), as.numeric(as.character(anova.table.lost[3, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+anova.table.lost[4, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[4, 5])), as.numeric(as.character(anova.table.lost[4, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+anova.table.lost[5, 6] <- round((1-pf(as.numeric(as.character(anova.table.lost[5, 5])), as.numeric(as.character(anova.table.lost[5, 3])), as.numeric(as.character(anova.table.lost[6, 3])))), digits=5)
+if(as.numeric(as.character(anova.table.lost[3,6]))<0.0001) { anova.table.lost[3,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.lost[4,6]))<0.0001) { anova.table.lost[4,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.lost[5,6]))<0.0001) { anova.table.lost[5,6]<-"< 0.0001"}
+etta.sq <- as.numeric(as.character(anova.table.lost[3, 2])) / ( as.numeric(as.character(anova.table.lost[3, 2])) + as.numeric(as.character(anova.table.lost[6, 2])) )
+etta.sq
+# etta.sq is the effect size calculation in its simplest calculated form.
+```
+
+Evolution phenotype gain:
+```{r}
+#setwd("/Users/mmgdepartment/Dropbox/Conservation")
+# This will need a data frame
+# I am making some assumptions about what things are called; feel free to change them but it may be easier
+# to change the names of the variables in what you feed into my code than change all the instances of
+# those names in my code.
+# For the data frame, I am assuming a structure with columns of:
+# Ancestral.Population -- which of the 10 pops the replicate started from
+# Reserve.Side -- what is the length of the side of an individual reserve
+# Random.Seed -- The random seed used in a run.
+# Lost.Phenotypes -- a number telling us how many phenotypes were lost.
+#data.for.ANOVA <- read.table(file="Dummy.Data.For.ANOVAs.csv", sep=",", header=T)
+data.for.ANOVA <- end_evolution_data_per_run
+data.for.ANOVA$patches <- NULL
+data.for.ANOVA$X <- NULL
+data.for.ANOVA$ecology <- NULL
+data.for.ANOVA$reserves <- NULL
+data.for.ANOVA$condition <- NULL
+data.for.ANOVA$killed <- NULL
+data.for.ANOVA$lost_phenotypes <- NULL
+data.for.ANOVA <- data.for.ANOVA[, c(2,3,1,4)]
+colnames(data.for.ANOVA) <- c("Ancestral.Population", "Reserve.Side", "Random.Seed", "New.Phenotypes")
+data.for.ANOVA$Ancestral.Population <- factor(data.for.ANOVA$Ancestral.Population)
+data.for.ANOVA$Random.Seed<- factor(data.for.ANOVA$Random.Seed)
+anova.new<-aov(New.Phenotypes ~ Error(Reserve.Side*Ancestral.Population), data=data.for.ANOVA)
+#Lost
+#Headers
+#Reserve
+#Population
+#Interaction
+#Error
+#Total
+anova.table.new <- matrix(nrow = 7, ncol = 6)
+anova.table.new[1, 1] <- "New Phenotypes"
+anova.table.new[2, 1] <- "Source"
+anova.table.new[2, 2]<-"SS"
+anova.table.new[2, 3]<-"df"
+anova.table.new[2, 4]<-"MS"
+anova.table.new[2, 5]<-"F"
+anova.table.new[2, 6]<-"p"
+anova.table.new[3, 1] <- "Reserve Side"
+anova.table.new[3, 2] <- round(as.numeric(as.character(summary(anova.new)[[1]][[1]][[2]])), digits=5)
+anova.table.new[3, 3] <- as.numeric(as.character(summary(anova.new)[[1]][[1]][[1]]))
+anova.table.new[3, 4] <- round(as.numeric(as.character(summary(anova.new)[[1]][[1]][[3]])), digits=5)
+anova.table.new[4, 1] <- "Ancestral Population"
+anova.table.new[4, 2] <- round(as.numeric(as.character(summary(anova.new)[[2]][[1]][[2]])), digits=5)
+anova.table.new[4, 3] <- as.numeric(as.character(summary(anova.new)[[2]][[1]][[1]]))
+anova.table.new[4, 4] <- round(as.numeric(as.character(summary(anova.new)[[2]][[1]][[3]])), digits=5)
+anova.table.new[5, 1] <- "Interaction"
+anova.table.new[5, 2] <- round(as.numeric(as.character(summary(anova.new)[[3]][[1]][[2]])), digits=5)
+anova.table.new[5, 3] <- as.numeric(as.character(summary(anova.new)[[3]][[1]][[1]]))
+anova.table.new[5, 4] <- round(as.numeric(as.character(summary(anova.new)[[3]][[1]][[3]])), digits=5)
+anova.table.new[6, 1] <- "Error"
+anova.table.new[6, 2] <- round(as.numeric(as.character(summary(anova.new)[[4]][[1]][[2]])), digits=5)
+anova.table.new[6, 3] <- as.numeric(as.character(summary(anova.new)[[4]][[1]][[1]]))
+anova.table.new[6, 4] <- round(as.numeric(as.character(summary(anova.new)[[4]][[1]][[3]])), digits=5)
+anova.table.new[7, 1] <- "Total"
+anova.table.new[7, 2] <- round(as.numeric(as.character(summary(anova.new)[[1]][[1]][[2]])) + as.numeric(as.character(summary(anova.new)[[2]][[1]][[2]])) + as.numeric(as.character(summary(anova.new)[[3]][[1]][[2]])) + as.numeric(as.character(summary(anova.new)[[4]][[1]][[2]])), digits=5)
+anova.table.new[7, 3] <- as.numeric(as.character(summary(anova.new)[[1]][[1]][[1]])) + as.numeric(as.character(summary(anova.new)[[2]][[1]][[1]])) + as.numeric(as.character(summary(anova.new)[[3]][[1]][[1]])) + as.numeric(as.character(summary(anova.new)[[4]][[1]][[2]]))
+anova.table.new[7, 4] <- round(as.numeric(as.character(anova.table.new[7,2]))/as.numeric(as.character(anova.table.new[7,3])), digits=5)
+anova.table.new[3, 5] <- round(as.numeric(as.character(anova.table.new[3, 4])) / as.numeric(as.character(anova.table.new[6, 4])), digits=5)
+anova.table.new[4, 5] <- round(as.numeric(as.character(anova.table.new[4, 4])) / as.numeric(as.character(anova.table.new[6, 4])), digits=5)
+anova.table.new[5, 5] <- round(as.numeric(as.character(anova.table.new[5, 4])) / as.numeric(as.character(anova.table.new[6, 4])), digits=5)
+anova.table.new[3, 6] <- round((1-pf(as.numeric(as.character(anova.table.new[3, 5])), as.numeric(as.character(anova.table.new[3, 3])), as.numeric(as.character(anova.table.new[6, 3])))), digits=5)
+anova.table.new[4, 6] <- round((1-pf(as.numeric(as.character(anova.table.new[4, 5])), as.numeric(as.character(anova.table.new[4, 3])), as.numeric(as.character(anova.table.new[6, 3])))), digits=5)
+anova.table.new[5, 6] <- round((1-pf(as.numeric(as.character(anova.table.new[5, 5])), as.numeric(as.character(anova.table.new[5, 3])), as.numeric(as.character(anova.table.new[6, 3])))), digits=5)
+if(as.numeric(as.character(anova.table.new[3,6]))<0.0001) { anova.table.new[3,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.new[4,6]))<0.0001) { anova.table.new[4,6]<-"< 0.0001"}
+if(as.numeric(as.character(anova.table.new[5,6]))<0.0001) { anova.table.new[5,6]<-"< 0.0001"}
+etta.sq <- as.numeric(as.character(anova.table.new[3, 2])) / ( as.numeric(as.character(anova.table.new[3, 2])) + as.numeric(as.character(anova.table.new[6, 2])) )
+etta.sq
+# etta.sq is the effect size calculation in its simplest calculated form.
+```
