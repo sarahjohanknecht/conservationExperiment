@@ -1,7 +1,10 @@
-This repository contains the components of the paper, "The Effects of Evolution
- and Spatial Structure on Diversity in Biological Reserves", by Emily Dolson,
-Michael Wiser, and Charles Ofria, to appear in the Proceedings of Artificial
-Life XV.
+This repository contains the components of the paper:
+
+# The Effects of Evolution and Spatial Structure on Diversity in Biological Reserves
+by Emily Dolson, Michael Wiser, and Charles Ofria
+Published in Proceedings of Artificial Life XV, 2017
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![DOI:dx.doi.org/10.7551/978-0-262-33936-0-ch071](https://img.shields.io/badge/DOI-10.7551/978-0-262-33936-0-ch071 -yellow.svg)](http://dx.doi.org/10.7551/978-0-262-33936-0-ch071)
 
 The top level contains the LaTeX document for the body of the paper, all of the
 figures that appear in the paper, and LaTeX style and bibliography files.
