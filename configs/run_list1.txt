@@ -1,7 +1,8 @@
 set description conservation
 set email johankn1@msu.edu
 set email_when final
-set walltime 10
+set class_pref 200
+set walltime 4
 set mem_request 4
 set config_dir /mnt/scratch/johankn1/conservationExperiment/configs
 set dest_dir /mnt/scratch/johankn1/conservation/test_command_results
