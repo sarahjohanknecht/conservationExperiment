@@ -2,7 +2,6 @@
 
 #setwd("/Users/mmgdepartment/Desktop/Conservation_9-25-2015")
 
-setwd("~/conservation/scripts")
 
 # This is where files will be from both my and Emily's HPCC accounts, on
 # the round of testing that gave us [WHAT IS IN THIS SET OF DATA?]
@@ -45,11 +44,10 @@ for (d in dirs) {
 		average_file_path <- paste(d2, "average.dat", sep = "/")
 		count_file_path <- paste(d2, "count.dat", sep = "/" )
 
-		if (file.exists(phenotype_file_path) & file.exists(average_file_path)){
-
+		if (file.exists(phenotype_file_path) & file.exists(average_file_path) & file.exists(count_file_path) ){
 			phenotypes <- read.csv(phenotype_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 8)
 			phenotypes[,1]<-as.numeric(as.character(phenotypes[,1]))
-			max.update.phenotype<-max(phenotypes[,1])
+			max.update.phenotype<-max(phenotypes[,1], na.rm=TRUE)
 
 			phenotypes<-subset(phenotypes, phenotypes[,1]==max.update.phenotype)
 
@@ -57,9 +55,11 @@ for (d in dirs) {
 
 			fitness <- read.csv(average_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
 			fitness[,1]<-as.numeric(as.character(fitness[,1]))
-			max.update.fitness<-max(fitness[,1])
+			max.update.fitness<-max(fitness[,1], na.rm=TRUE)
 			fitness<-subset(fitness, fitness[,1]==max.update.fitness)
-
+			print(max.update.fitness)
+			print(average_file_path)
+			print(length(rownames(fitness)))
 			wanted <- cbind(fitness[,1], fitness[,4], fitness[,13])
 
 			wanted[,1]<-as.numeric(as.character(wanted[,1]))
@@ -67,7 +67,11 @@ for (d in dirs) {
 			wanted[,3]<-as.numeric(as.character(wanted[,3]))
 
 			counts <- read.csv(count_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
-
+		#	print(wanted)
+		#	print(counts[,3])
+		#	print(counts[,4])
+			print(length(rownames(counts)))
+			print(length(rownames(wanted)))
 			wanted <-  cbind(wanted, counts[,3], counts[,4])
 
 			wanted[,4]<-as.numeric(as.character(wanted[,4]))
@@ -125,89 +129,6 @@ dirs <- list.dirs(path = "/mnt/home/dolsonem/conservation/round_2_results", recu
 
 
 # Take just the max update for each file; looking at just endpoints
-
-
-
-for (d in dirs) {
-	for (d2 in list.dirs(path = d, recursive = FALSE)){
-
-		phenotype_file_path <- paste(d2, "phenotype_count.dat", sep = "/")
-		average_file_path <- paste(d2, "average.dat", sep = "/")
-		count_file_path <- paste(d2, "count.dat", sep = "/")
-
-		if (file.exists(phenotype_file_path) & file.exists(average_file_path)){
-
-			phenotypes <- read.csv(phenotype_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 8)
-			phenotypes[,1]<-as.numeric(as.character(phenotypes[,1]))
-			max.update.phenotype<-max(phenotypes[,1])
-
-			phenotypes<-subset(phenotypes, phenotypes[,1]==max.update.phenotype)
-
-                        counts <- read.csv(count_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
-
-
-			fitness <- read.csv(average_file_path, header = F, sep = " ", na.strings = "", colClasses = "character", skip = 19)
-			fitness[,1]<-as.numeric(as.character(fitness[,1]))
-			max.update.fitness<-max(fitness[,1])
-			fitness<-subset(fitness, fitness[,1]==max.update.fitness)
-
-			wanted <- cbind(fitness[,1], fitness[,4], fitness[,13])
-
-			wanted[,1]<-as.numeric(as.character(wanted[,1]))
-			wanted[,2]<-as.numeric(as.character(wanted[,2]))
-			wanted[,3]<-as.numeric(as.character(wanted[,3]))
-
-			wanted < cbind(wanted, counts[,3], counts[,4]
-
-			wanted[,4]<-as.numeric(as.character(wanted[,4]))
-			wanted[,5]<-as.numeric(as.character(wanted[,5]))
-
-			fitness <- wanted
-
-			colnames(fitness) <- c("Update", "Fitness", "Generation", "Pop.Size", "Unique.Genotypes")
-
-			colnames(phenotypes) <- c("Update", "Unique.Phenotypes.Task", "Shannon.Diversity", "Unique.Phenotype.Count", "Average.Phenotype.Diversity", "Average.Task.Diversity")
-
-			dat <- merge(phenotypes, fitness, by = 1)
-
-			dat$Condition <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
-
-			dat$Killed <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_killed)', dat$Condition , perl=T))))
-
-			dat$Patches <- 0
-
-			if (as.numeric(unlist(gregexpr('patch', dat$Condition , perl=T)))>0) {
-				dat$Patches <- as.numeric(unlist(regmatches(dat$Condition, gregexpr('\\d+(?=_patch)', dat$Condition , perl=T))))
-				}
-
-			dat$Ecology <- "N"
-
-			if (as.numeric(unlist(gregexpr('ecology', dat$Condition , perl=T)))>0) {
-				dat$Ecology <- "Y"
-				}
-
-
-			full.string <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
-
-			seed <- tail(unlist(strsplit(full.string, split = "_", fixed = T)), n=1)
-
-
-			foo <- tail(unlist(strsplit(d, split = "/", fixed = T)), n=1)
-			blah <- tail(unlist(strsplit(foo, split = "-", fixed = T)), n=1)
-			initial.pop <- head(unlist(strsplit(blah, split = "_", fixed = T)), n=1)
-
-			dat$Initial.Pop<-initial.pop
-			dat$Seed <- as.numeric(as.character(seed))
-
-
-			results.data <- rbind(results.data, dat)
-			}
-		}
-	}
-
-
-
-
 
 backup.results.data<-results.data
 
