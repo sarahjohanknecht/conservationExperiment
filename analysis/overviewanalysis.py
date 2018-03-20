@@ -2,15 +2,15 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-data = pd.read_csv("Concatenated.Conservation.Data.Round.Two.Ecology.csv")
-data_eco =[]
+data = pd.read_csv("all_data_100000.csv")
+"""data_eco =[]
 data_no_eco = []
 length = len(data)
 print(length)
 
 for i in range(length):
     if data["Ecology"][i] == "Y":
-        print(data.loc[i])
+        print(data.loc[i])"""
 
 
 sns.boxplot(x=data["Patches"], y=data["Shannon.Diversity"])
