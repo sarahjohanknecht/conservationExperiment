@@ -24,7 +24,7 @@ for res_dir in glob.glob(sys.argv[1]):
     all_data["seed"] = res_dir.split("/")[-2].split("_")[-1]
     all_data["condition"] = res_dir
     all_data["patches"]= res_dir.split("/")[-2].split("_")[0]
-    all_data["killed"]=res_dir.split("/")[-2].split("_")[5]
+    all_data["killed"]=res_dir.split("/")[-2].split("_")[4]
 
     #get whether ecology or not
     if(res_dir.split("/")[-2].split("_")[-2][0:3] == "eco"):
@@ -37,4 +37,4 @@ for res_dir in glob.glob(sys.argv[1]):
 
 all_data = pd.concat(frames)
 
-all_data.to_csv("all_data.csv")
+all_data.to_csv("all_data_test.csv")
