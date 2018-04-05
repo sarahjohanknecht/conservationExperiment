@@ -2,28 +2,30 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-data = pd.read_csv("all_data_100000.csv")
-"""data_eco =[]
-data_no_eco = []
-length = len(data)
-print(length)
-
-for i in range(length):
-    if data["Ecology"][i] == "Y":
-        print(data.loc[i])"""
+data = pd.read_csv("all_data_100000_patches.csv")
 
 
-sns.boxplot(x=data["Patches"], y=data["Shannon.Diversity"])
-#plt.show()
+#Patches x Shannon Diversity
+#sns.boxplot(x=data["Patches"], y=data["Shannon.Diversity"])
+sns.boxplot(x=data["patches"], y=data["shannondiv"])
+plt.show()
 
-sns.boxplot(x=data["Patches"], y=data["Average.Task.Diversity"])
-#plt.show()
+#Patches x Average task Diversity
+#sns.boxplot(x=data["Patches"], y=data["Average.Task.Diversity"])
+sns.boxplot(x=data["patches"], y=data["avgtaskdiv"])
+plt.show()
 
-sns.boxplot(x=data["Patches"], y=data["Average.Phenotype.Diversity"])
-#plt.show()
+#Patches x Average Shannon Diversity
+#sns.boxplot(x=data["Patches"], y=data["Average.Phenotype.Diversity"])
+sns.boxplot(x=data["patches"], y=data["avgshannondiv"])
+plt.show()
 
-sns.boxplot(x=data["Patches"], y=data["Unique.Phenotypes.Task"])
-#plt.show()
+#Patches x Unqiue Phenotypes Task
+#sns.boxplot(x=data["Patches"], y=data["Unique.Phenotypes.Task"])
+sns.boxplot(x=data["patches"], y=data["uniquephenotypetask"])
+plt.show()
 
-sns.boxplot(x=data["Patches"], y=data["Unique.Phenotype.Count"])
-#plt.show()
+#Patches x Unique Phenotype Count
+#sns.boxplot(x=data["Patches"], y=data["Unique.Phenotype.Count"])
+sns.boxplot(x=data["patches"], y=data["uniquephenotypecount"])
+plt.show()
