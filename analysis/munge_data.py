@@ -1,3 +1,5 @@
+#to run: python munge_data.py "data_directory"
+
 import glob
 import sys
 import pandas as pd
