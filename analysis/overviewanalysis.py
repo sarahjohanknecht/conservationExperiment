@@ -1,4 +1,3 @@
-<<<<<<< current
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -42,26 +41,3 @@ plt.show()
 #sns.boxplot(x=data["Patches"], y=data["Unique.Phenotype.Count"])
 sns.boxplot(x=dataEco["patches"], y=dataEco["uniquephenotypecount"])
 plt.show()
-=======
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-data = pd.read_csv("Concatenated.Conservation.Data.Round.Two.Ecology.Runlist1-3.csv")
-
-
-sns.boxplot(x=data["Patches"], y=data["Shannon.Diversity"])
-plt.show()
-
-sns.boxplot(x=data["Patches"], y=data["Average.Task.Diversity"])
-plt.show()
-
-sns.boxplot(x=data["Patches"], y=data["Average.Phenotype.Diversity"])
-plt.show()
-
-sns.boxplot(x=data["Patches"], y=data["Unique.Phenotypes.Task"])
-plt.show()
-
-sns.boxplot(x=data["Patches"], y=data["Unique.Phenotype.Count"])
-plt.show()
->>>>>>> before discard
